@@ -3,14 +3,11 @@ from translator.models.encoder import Encoder
 from translator.models.decoder import Decoder
 from translator.models.seq2seq import Seq2Seq
 
-
 def _build_model(vocab_size=20, embed_dim=32, hidden_dim=64, num_layers=1):
-    """Helper: build a small Seq2Seq model for testing."""
     encoder = Encoder(vocab_size, embed_dim, hidden_dim, num_layers, dropout=0.0)
     decoder = Decoder(vocab_size, embed_dim, hidden_dim, 2 * hidden_dim, num_layers, dropout=0.0)
-    model = Seq2Seq(encoder, decoder, pad_token_id=0)
+    model = Seq2Seq(encoder, decoder, pad_token_id=0, bos_token_id=1, eos_token_id=2)
     return model
-
 
 def test_forward_shapes():
     """Verify Seq2Seq produces correct output shapes."""

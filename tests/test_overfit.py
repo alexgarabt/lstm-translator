@@ -27,7 +27,7 @@ def test_overfit_copy():
     # Build model
     encoder = Encoder(vocab_size, embed_dim, hidden_dim, num_layers, dropout=0.0)
     decoder = Decoder(vocab_size, embed_dim, hidden_dim, 2 * hidden_dim, num_layers, dropout=0.0)
-    model = Seq2Seq(encoder, decoder, pad_token_id=pad_id)
+    model = Seq2Seq(encoder, decoder, pad_token_id=pad_id, bos_token_id=bos_id, eos_token_id=eos_id)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Create 10 copy pairs: src = [bos, tokens..., eos], trg = same
@@ -116,7 +116,7 @@ def test_overfit_reverse():
 
     encoder = Encoder(vocab_size, embed_dim, hidden_dim, num_layers, dropout=0.0)
     decoder = Decoder(vocab_size, embed_dim, hidden_dim, 2 * hidden_dim, num_layers, dropout=0.0)
-    model = Seq2Seq(encoder, decoder, pad_token_id=pad_id)
+    model = Seq2Seq(encoder, decoder, pad_token_id=pad_id, bos_token_id=bos_id, eos_token_id=eos_id)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Create pairs: src = [bos, a, b, c, eos], trg = [bos, c, b, a, eos]
