@@ -19,6 +19,7 @@ translator/
 │       │   ├── tokenizer.py  # Word-level + BPE via sentencepiece
 │       │   ├── dataset.py    # torch Dataset + DataLoader
 │       │   └── download.py   # Descarga Tatoeba/OPUS
+                preprocessing.py
 │       │
 │       ├── training/         # Bloque 4: Entrenamiento
 │       │   ├── __init__.py
@@ -34,7 +35,7 @@ translator/
 │   ├── test_seq2seq.py       # Test de copia/inversión
 │   └── test_overfit.py       # Sobreajustar en 10 ejemplos
 │
-├── scripts/
+├── scripts/ 
 │   ├── train.py              # Entry point: python scripts/train.py
 │   ├── evaluate.py           # Evaluar modelo guardado
 │   └── translate.py          # Traducir frases interactivamente
