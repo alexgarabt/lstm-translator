@@ -1,3 +1,4 @@
+from pathlib import Path
 from translator.config import Config
 from translator.data.download import download_tatoeba
 from translator.data.preprocessing import load_pairs, train_val_test_split, save_texts
@@ -10,7 +11,38 @@ from translator.training.trainer import Trainer
 
 
 def main():
-    config = Config()
+    config = Config(
+            # data
+            data_dir = Path("training/data"),
+            max_length = 25,
+            vocab_size = 8000,
+            val_size = 2000,
+            test_size = 2000,
+            
+            # model
+            embed_dim = 256,
+            hidden_dim = 512,
+            num_layers = 2,
+            dropout = 0.3,
+
+            # training
+            batch_size = 128,
+            learning_rate = 3e-4,
+            max_epochs = 34,
+            gradient_clip= 1.0,
+            teacher_forcing_start = 1.0,
+            teacher_forcing_end = 0.3,
+            label_smoothing = 0.1,
+            
+            # logging
+            log_every = 50,
+            eval_every_epoch = 1,
+            checkpoint_dir = Path("training/checkpoint_dir"),
+            tensorboard_dir = Path("training/runs"),
+
+            # hardware
+            device = "cuda"
+    )
 
     # Download data
     en_path, es_path = download_tatoeba(config.data_dir)
@@ -55,7 +87,12 @@ def main():
         num_layers=config.num_layers,
         dropout=config.dropout,
     )
-    model = Seq2Seq(encoder, decoder, pad_token_id=src_tokenizer.pad_id)
+    model = Seq2Seq(
+        encoder, decoder,
+        pad_token_id=src_tokenizer.pad_id,
+        bos_token_id=src_tokenizer.bos_id,
+        eos_token_id=src_tokenizer.eos_id,
+    )
 
     # 7. Train
     trainer = Trainer(model, train_dataset, val_dataset, src_tokenizer, trg_tokenizer, config)

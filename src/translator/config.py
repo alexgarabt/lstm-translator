@@ -33,6 +33,7 @@ class Config:
 
     # Hardware
     device: str = "cuda"
+    dtype: str = "bfloat16"
 
     @property
     def encoder_dim(self) -> int:

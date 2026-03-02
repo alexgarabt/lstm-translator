@@ -6,19 +6,23 @@ from .encoder import Encoder
 from .decoder import Decoder
 
 class Seq2Seq(nn.Module):
-    def __init__(self, encoder: Encoder, decoder: Decoder, pad_token_id: int):
+    def __init__(self, encoder: Encoder, decoder: Decoder, pad_token_id: int, bos_token_id: int, eos_token_id: int):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
     def create_mask(self, src: torch.Tensor) -> torch.Tensor:
         """
-        Create the mask for the padding in attention
-        True = real position, False = padding
-        (batch, src_len)
+        Mask out padding, BOS and EOS from attention.
+        Only content tokens are visible to the decoder.
         """
-        return src != self.pad_token_id
+        mask = src != self.pad_token_id
+        mask = mask & (src != self.bos_token_id)
+        mask = mask & (src != self.eos_token_id)
+        return mask
 
     def forward(self, src: torch.Tensor, src_lengths: torch.Tensor, trg: torch.Tensor, teacher_forcing_ratio: float = 0.5) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """

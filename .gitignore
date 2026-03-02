@@ -1,5 +1,9 @@
+training
+runs/
+data/
 data/raw/
 checkpoints/
+checkpoint_dir/
 outputs/
 output*/
 # Byte-compiled / optimized / DLL files

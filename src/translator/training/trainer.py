@@ -94,16 +94,16 @@ class Trainer:
             trg = batch['trg'].to(self.config.device)
             src_lengths = batch['src_lengths'].to(self.config.device)
 
-            # Forward pass
-            logits, attention = self.model(src, src_lengths, trg, tf_ratio)
-
-            # Loss: compare predictions with target (without <START>)
-            # logits: (batch, trg_len-1, vocab_size)
-            # trg[:, 1:]: (batch, trg_len-1) — correct tokens without <START>
-            loss = self.criterion(
-                logits.reshape(-1, logits.shape[-1]),
-                trg[:, 1:].reshape(-1),
-            )
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                # Forward pass
+                logits, attention = self.model(src, src_lengths, trg, tf_ratio)
+                # Loss: compare predictions with target (without <START>)
+                # logits: (batch, trg_len-1, vocab_size)
+                # trg[:, 1:]: (batch, trg_len-1) — correct tokens without <START>
+                loss = self.criterion(
+                    logits.reshape(-1, logits.shape[-1]),
+                    trg[:, 1:].reshape(-1),
+                )
 
             # Backward pass
             self.optimizer.zero_grad()
@@ -141,13 +141,14 @@ class Trainer:
             trg = batch['trg'].to(self.config.device)
             src_lengths = batch['src_lengths'].to(self.config.device)
 
-            # Evaluation: teacher forcing = 0 (fully autoregressive)
-            logits, _ = self.model(src, src_lengths, trg, teacher_forcing_ratio=0.0)
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                # Evaluation: teacher forcing = 0 (fully autoregressive)
+                logits, _ = self.model(src, src_lengths, trg, teacher_forcing_ratio=0.0)
 
-            loss = self.criterion(
-                logits.reshape(-1, logits.shape[-1]),
-                trg[:, 1:].reshape(-1),
-            )
+                loss = self.criterion(
+                    logits.reshape(-1, logits.shape[-1]),
+                    trg[:, 1:].reshape(-1),
+                )
             total_loss += loss.item()
 
         return total_loss / len(self.val_loader)

@@ -3,7 +3,7 @@ import zipfile
 from pathlib import Path
 
 
-TATOEBA_URL = "https://object.pouta.csc.fi/OPUS-Tatoeba/v2024-01-01/moses/en-es.txt.zip"
+TATOEBA_URL = "https://object.pouta.csc.fi/OPUS-Tatoeba/v2023-04-12/moses/en-es.txt.zip"
 
 
 def download_tatoeba(data_dir: str | Path = "data") -> tuple[Path, Path]:

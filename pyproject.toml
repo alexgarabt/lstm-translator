@@ -13,6 +13,7 @@ dependencies = [
     "tqdm",
     "rich",
     "matplotlib",
+    "setuptools<82",
 ]
 
 [project.optional-dependencies]
