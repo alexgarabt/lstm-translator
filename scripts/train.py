@@ -12,20 +12,20 @@ from translator.training.trainer import Trainer
 def main():
     config = Config()
 
-    # 1. Download data
+    # Download data
     en_path, es_path = download_tatoeba(config.data_dir)
 
-    # 2. Load and split
+    # Load and split
     pairs = load_pairs(en_path, es_path, max_length=config.max_length)
     train_pairs, val_pairs, test_pairs = train_val_test_split(
         pairs, val_size=config.val_size, test_size=config.test_size
     )
 
-    # 3. Save separate text files for tokenizer training
+    # Save separate text files for tokenizer training
     train_prefix = config.data_dir / "train"
     save_texts(train_pairs, train_prefix)
 
-    # 4. Train tokenizers (one for EN, one for ES)
+    # Train tokenizers (one for EN, one for ES)
     en_model = str(config.data_dir / "spm_en")
     es_model = str(config.data_dir / "spm_es")
 
@@ -35,14 +35,14 @@ def main():
     src_tokenizer = Tokenizer(f"{en_model}.model")
     trg_tokenizer = Tokenizer(f"{es_model}.model")
 
-    # 5. Create datasets
+    # Create datasets
     train_dataset = TranslationDataset(train_pairs, src_tokenizer, trg_tokenizer)
     val_dataset = TranslationDataset(val_pairs, src_tokenizer, trg_tokenizer)
 
-    # 6. Build model
+    # Build model
     encoder = Encoder(
         vocab_size=src_tokenizer.vocab_size,
-        embed_dim=config.embed_dim,
+        embedded_dim=config.embed_dim,
         hidden_dim=config.hidden_dim,
         num_layers=config.num_layers,
         dropout=config.dropout,

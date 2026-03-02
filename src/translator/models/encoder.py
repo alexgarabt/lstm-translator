@@ -23,7 +23,7 @@ class Encoder(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-   def forward(self, src: torch.Tensor, src_lengths: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self, src: torch.Tensor, src_lengths: torch.Tensor) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
         Parameters:
             src: (batch, src_len) tokens id

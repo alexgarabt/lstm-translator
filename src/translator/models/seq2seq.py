@@ -20,7 +20,7 @@ class Seq2Seq(nn.Module):
         """
         return src != self.pad_token_id
 
-    def forward(self, src: torch.Tensor, src_lengths: torch.Tensor, trg: torch.Tensor, teach_forcing_ratio: float = 0.5) -> tuple[torch.Tensor, list[torch.Tensor]]:
+    def forward(self, src: torch.Tensor, src_lengths: torch.Tensor, trg: torch.Tensor, teacher_forcing_ratio: float = 0.5) -> tuple[torch.Tensor, list[torch.Tensor]]:
         """
         Parameters
         ----------
@@ -63,7 +63,7 @@ class Seq2Seq(nn.Module):
             all_attention.append(attn_weights)
 
             # teacher forcing and autoregressive sampling
-            if random.random() < teach_forcing_ratio:
+            if random.random() < teacher_forcing_ratio:
                 current_token = trg[:, t]
             else:
                 current_token = logits.argmax(dim=1)

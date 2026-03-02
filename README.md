@@ -40,7 +40,4 @@ translator/
 │   ├── evaluate.py           # Evaluar modelo guardado
 │   └── translate.py          # Traducir frases interactivamente
 │
-├── notebooks/                # Exploración (opcional)
-│   └── visualize_attention.ipynb
-│
 └── checkpoints/              # Modelos guardados (gitignored)
