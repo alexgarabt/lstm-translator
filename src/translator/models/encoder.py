@@ -34,6 +34,7 @@ class Encoder(nn.Module):
                 h_dec: (num_layers, batch, hidden_dim)
                 c_dec: (num_layers, batch, hidden_dim)
         """
+        # FIX: CHECK FOR SRC_LENGTHS why is not used
 
         # embedding + dropout
         embedded = self.dropout(self.embedding(src))

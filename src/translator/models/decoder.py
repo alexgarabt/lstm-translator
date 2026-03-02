@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .lstm import LSTM, LSTMCell
+from .lstm import LSTM 
 from .attention import Attention
 
 class Decoder(nn.Module):
@@ -36,22 +36,22 @@ class Decoder(nn.Module):
         mask: torch.Tensor,             
     ) -> tuple[torch.Tensor, list, list, torch.Tensor, torch.Tensor]:
         """
-        One step of decodification
+        One step of decoding
 
         Parameters:
-            (batch,) — token id del paso anterior
-            lista de (batch, hidden_dim) por capa
-            lista de (batch, hidden_dim) por capa
-            (batch, src_len, encoder_dim)
-            (batch, encoder_dim) — contexto del paso anterior
+            (batch,) — token id from the previous step  
+            list of (batch, hidden_dim) per layer  
+            list of (batch, hidden_dim) per layer  
+            (batch, src_len, encoder_dim)  
+            (batch, encoder_dim) — context vector from the previous step  
             (batch, src_len)
-
+        
         Returns:
-            logits: (batch, vocab_size) — distribución sobre el vocabulario
-            h_new: lista de hidden states actualizados
-            c_new: lista de cell states actualizados
-            context: (batch, encoder_dim) — nuevo vector de contexto
-            attn_weights: (batch, src_len) — pesos de atención
+            logits: (batch, vocab_size) — distribution over the vocabulary  
+            h_new: list of updated hidden states  
+            c_new: list of updated cell states  
+            context: (batch, encoder_dim) — new context vector  
+            attn_weights: (batch, src_len) — attention weights
         """
 
         # (batch,) → (batch, embed_dim)
