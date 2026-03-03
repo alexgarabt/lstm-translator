@@ -14,6 +14,7 @@ dependencies = [
     "rich",
     "matplotlib",
     "setuptools<82",
+    "huggingface-hub>=1.5.0",
 ]
 
 [project.optional-dependencies]
