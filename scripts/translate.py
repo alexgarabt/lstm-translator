@@ -1,5 +1,3 @@
-# scripts/translate.py
-
 import torch
 from pathlib import Path
 from translator.config import Config
@@ -15,7 +13,7 @@ def load_model(config: Config, src_tokenizer: Tokenizer, trg_tokenizer: Tokenize
         embedded_dim=config.embed_dim,
         hidden_dim=config.hidden_dim,
         num_layers=config.num_layers,
-        dropout=0.0,  # no dropout at inference
+        dropout=0.0,
     )
     decoder = Decoder(
         vocab_size=trg_tokenizer.vocab_size,
@@ -40,7 +38,8 @@ def load_model(config: Config, src_tokenizer: Tokenizer, trg_tokenizer: Tokenize
     return model
 
 
-def translate(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Tokenizer, text: str, device: str, max_len: int = 30) -> str:
+def translate_greedy(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Tokenizer, text: str, device: str, max_len: int = 30) -> str:
+    """Greedy decoding — pick the most probable token at each step."""
     src_ids = src_tokenizer.encode(text)
     src = torch.tensor([src_ids], device=device)
     src_lengths = torch.tensor([len(src_ids)], device=device)
@@ -48,7 +47,6 @@ def translate(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Tokenizer
 
     with torch.no_grad():
         enc_out, (h, c) = model.encoder(src, src_lengths)
-
         h = [h[l] for l in range(model.decoder.num_layers)]
         c = [c[l] for l in range(model.decoder.num_layers)]
         context = torch.zeros(1, enc_out.shape[2], device=device)
@@ -68,6 +66,22 @@ def translate(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Tokenizer
     return trg_tokenizer.decode(result)
 
 
+def translate_beam(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Tokenizer, text: str, device: str, beam_width: int = 5) -> str:
+    """Beam search decoding — keep B best hypotheses at each step."""
+    src_ids = src_tokenizer.encode(text)
+    src = torch.tensor([src_ids], device=device)
+    src_lengths = torch.tensor([len(src_ids)], device=device)
+
+    tokens = model.beam_search(
+        src, src_lengths,
+        bos_id=trg_tokenizer.bos_id,
+        eos_id=trg_tokenizer.eos_id,
+        beam_width=beam_width,
+    )
+
+    return trg_tokenizer.decode(tokens)
+
+
 def main():
     config = Config(
         data_dir=Path("training/data"),
@@ -77,15 +91,12 @@ def main():
         device="cuda",
     )
 
-    # Load tokenizers
     src_tokenizer = Tokenizer(config.data_dir / "spm_en.model")
     trg_tokenizer = Tokenizer(config.data_dir / "spm_es.model")
 
-    # Load model from best checkpoint
     checkpoint_path = "training/checkpoint_dir/model_epoch_33_loss_4.0347.pt"
     model = load_model(config, src_tokenizer, trg_tokenizer, checkpoint_path)
 
-    # Test sentences
     tests = [
         "Hello",
         "How are you?",
@@ -100,9 +111,11 @@ def main():
     ]
 
     for text in tests:
-        result = translate(model, src_tokenizer, trg_tokenizer, text, config.device)
-        print(f"EN: {text}")
-        print(f"ES: {result}")
+        greedy = translate_greedy(model, src_tokenizer, trg_tokenizer, text, config.device)
+        beam = translate_beam(model, src_tokenizer, trg_tokenizer, text, config.device, beam_width=5)
+        print(f"EN:     {text}")
+        print(f"GREEDY: {greedy}")
+        print(f"BEAM:   {beam}")
         print()
 
 

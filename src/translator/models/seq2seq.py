@@ -75,4 +75,116 @@ class Seq2Seq(nn.Module):
         all_logits = torch.stack(all_logits, dim=1)
         return all_logits, all_attention
 
+    @torch.no_grad()
+    def beam_search(
+        self,
+        src: torch.Tensor,              # (1, src_len) — single example, no batch
+        src_lengths: torch.Tensor,      # (1,)
+        bos_id: int,
+        eos_id: int,
+        beam_width: int = 5,
+        max_len: int = 50,
+        length_penalty: float = 0.6,
+    ) -> list[int]:
+        """
+        Beam search decoding for a single sentence.
+    
+        Returns the best token sequence (list of ids, without bos/eos).
+        """
+        device = src.device
+    
+        # 1. Encode — only once, shared by all beams
+        encoder_outputs, (h_dec, c_dec) = self.encoder(src, src_lengths)
+        mask = self.create_mask(src)
+    
+        # 2. Initialize decoder states
+        h = [h_dec[layer] for layer in range(self.decoder.num_layers)]
+        c = [c_dec[layer] for layer in range(self.decoder.num_layers)]
+        context = torch.zeros(1, encoder_outputs.shape[2], device=device)
+    
+        # 3. Each beam is: (log_prob, token_sequence, h, c, context, finished)
+        initial_beam = {
+            'log_prob': 0.0,
+            'tokens': [],
+            'h': h,
+            'c': c,
+            'context': context,
+            'finished': False,
+        }
+        beams = [initial_beam]
+    
+        # Current input token for all beams: <bos>
+        completed = []
+    
+        for step in range(max_len):
+            all_candidates = []
+    
+            for beam in beams:
+                if beam['finished']:
+                    completed.append(beam)
+                    continue
+    
+                # Determine input token
+                if len(beam['tokens']) == 0:
+                    token = torch.tensor([bos_id], device=device)
+                else:
+                    token = torch.tensor([beam['tokens'][-1]], device=device)
+    
+                # One decoder step
+                logits, h_new, c_new, context_new, _ = self.decoder.forward_step(
+                    token, beam['h'], beam['c'],
+                    encoder_outputs, beam['context'], mask,
+                )
+    
+                # Log probabilities over vocabulary
+                log_probs = torch.nn.functional.log_softmax(logits, dim=1)  # (1, vocab_size)
+    
+                # Top-k candidates from this beam
+                topk_log_probs, topk_ids = log_probs.topk(beam_width, dim=1)  # (1, beam_width)
+    
+                for i in range(beam_width):
+                    token_id = topk_ids[0, i].item()
+                    token_log_prob = topk_log_probs[0, i].item()
+    
+                    new_beam = {
+                        'log_prob': beam['log_prob'] + token_log_prob,
+                        'tokens': beam['tokens'] + [token_id],
+                        'h': h_new,
+                        'c': c_new,
+                        'context': context_new,
+                        'finished': token_id == eos_id,
+                    }
+                    all_candidates.append(new_beam)
+    
+            if not all_candidates:
+                break
+    
+            # Sort by score with length penalty and keep top beam_width
+            def score(beam):
+                length = len(beam['tokens'])
+                # Length penalty: ((5 + length) / 6) ^ alpha
+                # Prevents beam search from preferring shorter sequences
+                lp = ((5 + length) / 6) ** length_penalty
+                return beam['log_prob'] / lp
+    
+            all_candidates.sort(key=score, reverse=True)
+            beams = all_candidates[:beam_width]
+    
+            # If all active beams are finished, stop
+            if all(b['finished'] for b in beams):
+                break
+    
+        # Collect all finished beams + any unfinished ones
+        completed.extend([b for b in beams if b['finished']])
+        if not completed:
+            completed = beams  # fallback: use best unfinished
+    
+        # Return the best sequence
+        best = max(completed, key=score)
+        # Remove eos if present
+        tokens = best['tokens']
+        if tokens and tokens[-1] == eos_id:
+            tokens = tokens[:-1]
+    
+        return tokens
 
