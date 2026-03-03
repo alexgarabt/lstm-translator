@@ -1,6 +1,5 @@
 from pathlib import Path
 from translator.config import Config
-from translator.data.download import download_tatoeba
 from translator.data.preprocessing import load_pairs, train_val_test_split, save_texts
 from translator.data.tokenizer import Tokenizer
 from translator.data.dataset import TranslationDataset
@@ -12,54 +11,45 @@ from translator.training.trainer import Trainer
 
 def main():
     config = Config(
-            # data
-            data_dir = Path("training/data"),
-            max_length = 25,
-            vocab_size = 8000,
-            val_size = 2000,
-            test_size = 2000,
-            
-            # model
-            embed_dim = 256,
-            hidden_dim = 512,
-            num_layers = 2,
-            dropout = 0.3,
-
-            # training
-            batch_size = 128,
-            learning_rate = 3e-4,
-            max_epochs = 34,
-            gradient_clip= 1.0,
-            teacher_forcing_start = 1.0,
-            teacher_forcing_end = 0.3,
-            label_smoothing = 0.1,
-            
-            # logging
-            log_every = 50,
-            eval_every_epoch = 1,
-            checkpoint_dir = Path("training/checkpoint_dir"),
-            tensorboard_dir = Path("training/runs"),
-
-            # hardware
-            device = "cuda"
+        data_dir=Path("training/data"),
+        max_length=35,
+        vocab_size=16000,
+        val_size=3000,
+        test_size=3000,
+        embed_dim=256,
+        hidden_dim=512,
+        num_layers=2,
+        dropout=0.35,
+        batch_size=96,
+        learning_rate=3e-4,
+        max_epochs=20,
+        gradient_clip=1.0,
+        teacher_forcing_start=1.0,
+        teacher_forcing_end=0.3,
+        label_smoothing=0.1,
+        log_every=100,
+        eval_every_epoch=1,
+        checkpoint_dir=Path("training/checkpoint_v2"),
+        tensorboard_dir=Path("training/runs_v2"),
+        device="cuda",
     )
 
-    # Download data
-    en_path, es_path = download_tatoeba(config.data_dir)
+    # Load combined data directly
+    en_path = config.data_dir / "combined.en"
+    es_path = config.data_dir / "combined.es"
 
-    # Load and split
     pairs = load_pairs(en_path, es_path, max_length=config.max_length)
     train_pairs, val_pairs, test_pairs = train_val_test_split(
         pairs, val_size=config.val_size, test_size=config.test_size
     )
 
-    # Save separate text files for tokenizer training
-    train_prefix = config.data_dir / "train"
+    # Save text files for tokenizer training
+    train_prefix = config.data_dir / "train_v2"
     save_texts(train_pairs, train_prefix)
 
-    # Train tokenizers (one for EN, one for ES)
-    en_model = str(config.data_dir / "spm_en")
-    es_model = str(config.data_dir / "spm_es")
+    # Train tokenizers on combined corpus
+    en_model = str(config.data_dir / "spm_en_v2")
+    es_model = str(config.data_dir / "spm_es_v2")
 
     Tokenizer.train_model(f"{train_prefix}.en", en_model, vocab_size=config.vocab_size)
     Tokenizer.train_model(f"{train_prefix}.es", es_model, vocab_size=config.vocab_size)
@@ -94,7 +84,7 @@ def main():
         eos_token_id=src_tokenizer.eos_id,
     )
 
-    # 7. Train
+    # Train
     trainer = Trainer(model, train_dataset, val_dataset, src_tokenizer, trg_tokenizer, config)
     trainer.fit()
 

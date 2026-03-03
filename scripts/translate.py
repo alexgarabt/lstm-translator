@@ -84,7 +84,7 @@ def translate_beam(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Toke
 
 def main():
     config = Config(
-        data_dir=Path("training/data"),
+        data_dir=Path("training/data/tatoeba"),
         embed_dim=256,
         hidden_dim=512,
         num_layers=2,

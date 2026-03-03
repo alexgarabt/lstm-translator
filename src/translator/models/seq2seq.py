@@ -76,16 +76,7 @@ class Seq2Seq(nn.Module):
         return all_logits, all_attention
 
     @torch.no_grad()
-    def beam_search(
-        self,
-        src: torch.Tensor,              # (1, src_len) — single example, no batch
-        src_lengths: torch.Tensor,      # (1,)
-        bos_id: int,
-        eos_id: int,
-        beam_width: int = 5,
-        max_len: int = 50,
-        length_penalty: float = 0.6,
-    ) -> list[int]:
+    def beam_search(self, src: torch.Tensor, src_lengths: torch.Tensor, bos_id: int, eos_id: int, beam_width: int = 5, max_len: int = 50, length_penalty: float = 0.6) -> list[int]:
         """
         Beam search decoding for a single sentence.
     
@@ -93,16 +84,16 @@ class Seq2Seq(nn.Module):
         """
         device = src.device
     
-        # 1. Encode — only once, shared by all beams
+        # Encode — only once, shared by all beams
         encoder_outputs, (h_dec, c_dec) = self.encoder(src, src_lengths)
         mask = self.create_mask(src)
     
-        # 2. Initialize decoder states
+        # Initialize decoder states
         h = [h_dec[layer] for layer in range(self.decoder.num_layers)]
         c = [c_dec[layer] for layer in range(self.decoder.num_layers)]
         context = torch.zeros(1, encoder_outputs.shape[2], device=device)
     
-        # 3. Each beam is: (log_prob, token_sequence, h, c, context, finished)
+        # beam is: (log_prob, token_sequence, h, c, context, finished)
         initial_beam = {
             'log_prob': 0.0,
             'tokens': [],
