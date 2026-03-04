@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import _LRScheduler
 from functools import partial
+from pathlib import Path
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -26,6 +28,8 @@ class Trainer:
         src_tokenizer: Tokenizer,
         trg_tokenizer: Tokenizer,
         config: Config,
+        resume_from: str | Path | None = None,
+        scheduler: _LRScheduler | None = None,
     ):
         self.model = model.to(config.device)
         self.config = config
@@ -52,7 +56,7 @@ class Trainer:
             shuffle=True,
             collate_fn=partial(collate_fn, pad_id=src_tokenizer.pad_id),
             num_workers=2,
-            pin_memory=True,  # speeds up CPU -> GPU transfer
+            pin_memory=True,
         )
         self.val_loader = DataLoader(
             val_dataset,
@@ -64,9 +68,38 @@ class Trainer:
         # TensorBoard
         self.writer = SummaryWriter(config.tensorboard_dir)
         self.global_step = 0
+        self.start_epoch = 0
 
-        # Fixed validation examples for attention visualization across epochs
+        # Fixed validation examples for attention visualization
         self.viz_examples = self._get_viz_examples(val_dataset, n=5)
+
+        # LR scheduler (optional, set before resume so state can be restored)
+        self.scheduler = scheduler
+
+        # Resume from checkpoint if provided
+        if resume_from is not None:
+            self._resume_checkpoint(Path(resume_from))
+
+    def _resume_checkpoint(self, path: Path):
+        """Load model, optimizer, scheduler state and resume counters."""
+        print(f"Resuming from: {path}")
+        checkpoint = torch.load(path, map_location=self.config.device, weights_only=False)
+
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        self.start_epoch = checkpoint["epoch"] + 1
+        self.global_step = checkpoint.get("global_step", self.start_epoch * len(self.train_loader))
+
+        # Restore scheduler state if both exist
+        if self.scheduler is not None and "scheduler_state_dict" in checkpoint:
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
+        print(
+            f"  Resumed: epoch={self.start_epoch}, "
+            f"global_step={self.global_step}, "
+            f"val_loss={checkpoint.get('val_loss', '?')}"
+        )
 
     def _get_viz_examples(self, dataset: TranslationDataset, n: int) -> list[dict]:
         """Select N fixed examples to visualize attention evolution."""
@@ -76,9 +109,11 @@ class Trainer:
         return examples
 
     def _get_teacher_forcing_ratio(self, epoch: int) -> float:
-        """Linear decay of teacher forcing ratio across epochs."""
+        """Linear decay of teacher forcing ratio across total epochs."""
         cfg = self.config
-        progress = epoch / max(cfg.max_epochs - 1, 1)
+        # Use absolute epoch (start_epoch + max_epochs) for consistent schedule
+        total_epochs = self.start_epoch + cfg.max_epochs
+        progress = epoch / max(total_epochs - 1, 1)
         return cfg.teacher_forcing_start + progress * (cfg.teacher_forcing_end - cfg.teacher_forcing_start)
 
     def train_epoch(self, epoch: int) -> float:
@@ -95,34 +130,34 @@ class Trainer:
             src_lengths = batch['src_lengths'].to(self.config.device)
 
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                # Forward pass
                 logits, attention = self.model(src, src_lengths, trg, tf_ratio)
-                # Loss: compare predictions with target (without <START>)
-                # logits: (batch, trg_len-1, vocab_size)
-                # trg[:, 1:]: (batch, trg_len-1) — correct tokens without <START>
                 loss = self.criterion(
                     logits.reshape(-1, logits.shape[-1]),
                     trg[:, 1:].reshape(-1),
                 )
 
-            # Backward pass
             self.optimizer.zero_grad()
             loss.backward()
 
-            # Gradient clipping — returns norm before clipping
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
                 self.config.gradient_clip,
             ).item()
 
-            # Parameter update
             self.optimizer.step()
 
-            # Logging
+            # Step scheduler per batch if it exists
+            if self.scheduler is not None:
+                self.scheduler.step()
+
             total_loss += loss.item()
             self.global_step += 1
 
-            progress_bar.set_postfix(loss=f"{loss.item():.4f}", grad=f"{grad_norm:.2f}")
+            # Progress bar info
+            postfix = {"loss": f"{loss.item():.4f}", "grad": f"{grad_norm:.2f}"}
+            if self.scheduler is not None:
+                postfix["lr"] = f"{self.scheduler.get_last_lr()[0]:.2e}"
+            progress_bar.set_postfix(postfix)
 
             if self.global_step % self.config.log_every == 0:
                 self._log_step(loss.item(), grad_norm, attention, tf_ratio)
@@ -142,9 +177,7 @@ class Trainer:
             src_lengths = batch['src_lengths'].to(self.config.device)
 
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                # Evaluation: teacher forcing = 0 (fully autoregressive)
                 logits, _ = self.model(src, src_lengths, trg, teacher_forcing_ratio=0.0)
-
                 loss = self.criterion(
                     logits.reshape(-1, logits.shape[-1]),
                     trg[:, 1:].reshape(-1),
@@ -157,12 +190,13 @@ class Trainer:
         """Log metrics to TensorBoard every N steps."""
         step = self.global_step
 
-        # Basic scalars
         self.writer.add_scalar('train/loss', loss, step)
         self.writer.add_scalar('train/grad_norm', grad_norm, step)
         self.writer.add_scalar('train/teacher_forcing', tf_ratio, step)
 
-        # Attention entropy from last decoder step
+        if self.scheduler is not None:
+            self.writer.add_scalar('train/learning_rate', self.scheduler.get_last_lr()[0], step)
+
         if attention:
             entropy = compute_attention_entropy(attention[-1])
             self.writer.add_scalar('train/attention_entropy', entropy, step)
@@ -172,13 +206,11 @@ class Trainer:
         self.writer.add_scalar('epoch/train_loss', train_loss, epoch)
         self.writer.add_scalar('epoch/val_loss', val_loss, epoch)
 
-        # Weight and gradient histograms
         for name, param in self.model.named_parameters():
             if param.grad is not None:
                 self.writer.add_histogram(f'weights/{name}', param, epoch)
                 self.writer.add_histogram(f'gradients/{name}', param.grad, epoch)
 
-        # Attention heatmaps for fixed validation examples
         self._log_attention_examples(epoch)
 
     @torch.no_grad()
@@ -187,20 +219,16 @@ class Trainer:
         self.model.eval()
 
         for i, example in enumerate(self.viz_examples):
-            src = example['src'].unsqueeze(0).to(self.config.device)    # (1, src_len)
-            trg = example['trg'].unsqueeze(0).to(self.config.device)    # (1, trg_len)
+            src = example['src'].unsqueeze(0).to(self.config.device)
+            trg = example['trg'].unsqueeze(0).to(self.config.device)
             src_lengths = torch.tensor([len(example['src'])]).to(self.config.device)
 
             logits, attention = self.model(src, src_lengths, trg, teacher_forcing_ratio=0.0)
 
-            # Source tokens for heatmap labels
             src_tokens = self.src_tokenizer.decode_with_tokens(example['src'].tolist())
-
-            # Predicted tokens (not reference)
             predicted_ids = logits.argmax(dim=-1).squeeze(0).tolist()
             trg_tokens = self.trg_tokenizer.decode_with_tokens(predicted_ids)
 
-            # Attention: list of (1, src_len) -> list of (src_len,)
             attn_for_plot = [a.squeeze(0) for a in attention]
 
             fig = plot_attention(src_tokens, trg_tokens, attn_for_plot)
@@ -209,39 +237,65 @@ class Trainer:
 
         self.model.train()
 
-    def save_checkpoint(self, epoch: int, val_loss: float):
-        """Save model checkpoint."""
+    def save_checkpoint(self, epoch: int, val_loss: float, tag: str = "best"):
+        """
+        Save model checkpoint.
+
+        Args:
+            epoch: current epoch number
+            val_loss: validation loss at this epoch
+            tag: "best" saves as best only, "last" saves as last only,
+                 "both" saves both best and last
+        """
         self.config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        path = self.config.checkpoint_dir / f"model_epoch_{epoch}_loss_{val_loss:.4f}.pt"
-        torch.save({
+
+        state = {
             'epoch': epoch,
+            'global_step': self.global_step,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'val_loss': val_loss,
             'config': self.config,
-        }, path)
+        }
+
+        # Save scheduler state if it exists
+        if self.scheduler is not None:
+            state['scheduler_state_dict'] = self.scheduler.state_dict()
+
+        path = self.config.checkpoint_dir / f"model_epoch_{epoch}_loss_{val_loss:.4f}.pt"
+        torch.save(state, path)
         print(f"Checkpoint saved: {path}")
 
     def fit(self):
         """Main training loop."""
         best_val_loss = float('inf')
+        end_epoch = self.start_epoch + self.config.max_epochs
 
         print(f"Training on {self.config.device}")
         print(f"Parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        if self.start_epoch > 0:
+            print(f"Resuming from epoch {self.start_epoch}")
+        if self.scheduler is not None:
+            print(f"LR scheduler: {self.scheduler.__class__.__name__}")
+        print(f"Epochs: {self.start_epoch} -> {end_epoch}")
         print(f"TensorBoard: tensorboard --logdir {self.config.tensorboard_dir}")
         print()
 
-        for epoch in range(self.config.max_epochs):
+        for epoch in range(self.start_epoch, end_epoch):
             train_loss = self.train_epoch(epoch)
             val_loss = self.evaluate()
 
             self._log_epoch(epoch, train_loss, val_loss)
 
             tf_ratio = self._get_teacher_forcing_ratio(epoch)
+            lr_info = ""
+            if self.scheduler is not None:
+                lr_info = f" | LR: {self.scheduler.get_last_lr()[0]:.2e}"
+
             print(
-                f"Epoch {epoch+1}/{self.config.max_epochs} | "
+                f"Epoch {epoch+1}/{end_epoch} | "
                 f"Train: {train_loss:.4f} | Val: {val_loss:.4f} | "
-                f"TF: {tf_ratio:.2f}"
+                f"TF: {tf_ratio:.2f}{lr_info}"
             )
 
             # Save if best so far
