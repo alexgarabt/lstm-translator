@@ -4,7 +4,7 @@ A sequence-to-sequence neural machine translation system built **entirely from s
 
 **Pre-trained model**: [huggingface.co/alexgara/lstm-en-es-translator](https://huggingface.co/alexgara/lstm-en-es-translator)
 
-https://github.com/user-attachments/assets/ffd9ac47-3138-46a4-876c-34e608d9adec
+https://github.com/user-attachments/assets/c930abbb-c16f-4295-abbd-d82785c15ed8
 
 ## Quick Start
 
@@ -157,6 +157,22 @@ uv run python scripts/inference.py --device cpu --interactive
 | I don't understand | no no lo entiendo. | no entiendo. |
 
 Beam search eliminates the repetition artifacts visible in greedy decoding.
+
+### Performance
+
+The model (~31.9M parameters) runs on both CPU and GPU. No GPU required.
+
+| Device | 12 sentences | Memory |
+|---|---|---|
+| CPU (AMD Ryzen AI 9 HX 379) | ~12.8s | ~200 MB RAM |
+| GPU (NVIDIA) | ~4.4s | ~150 MB VRAM |
+
+Model weights in float32: 31.9M params x 4 bytes = ~128 MB, plus tokenizers and PyTorch overhead.
+
+```bash
+# Force CPU inference
+uv run python scripts/inference.py --device cpu --interactive
+```
 
 ### Using a Local Checkpoint
 

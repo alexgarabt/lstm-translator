@@ -80,6 +80,22 @@ uv run python scripts/inference.py --interactive
 
 Beam search eliminates the repetition artifacts visible in greedy decoding.
 
+## Performance
+
+The model (~31.9M parameters) runs on both **CPU and GPU**. No GPU required.
+
+| Device | 12 sentences | Memory |
+|---|---|---|
+| CPU (AMD Ryzen AI 9 HX 379) | ~12.8s | ~200 MB RAM |
+| GPU (NVIDIA) | ~4.4s | ~150 MB VRAM |
+
+Model weights in float32: 31.9M params x 4 bytes = ~128 MB, plus tokenizers and PyTorch overhead.
+
+```bash
+# Force CPU inference
+uv run python scripts/inference.py --device cpu --interactive
+```
+
 ## Training
 
 ### Hyperparameters
