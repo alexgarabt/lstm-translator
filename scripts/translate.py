@@ -84,17 +84,17 @@ def translate_beam(model: Seq2Seq, src_tokenizer: Tokenizer, trg_tokenizer: Toke
 
 def main():
     config = Config(
-        data_dir=Path("training/data/tatoeba"),
+        data_dir=Path("training/data/"),
         embed_dim=256,
         hidden_dim=512,
         num_layers=2,
         device="cuda",
     )
 
-    src_tokenizer = Tokenizer(config.data_dir / "spm_en.model")
-    trg_tokenizer = Tokenizer(config.data_dir / "spm_es.model")
+    src_tokenizer = Tokenizer(config.data_dir / "spm_en_v2.model")
+    trg_tokenizer = Tokenizer(config.data_dir / "spm_es_v2.model")
 
-    checkpoint_path = "training/checkpoint_dir/model_epoch_33_loss_4.0347.pt"
+    checkpoint_path = "training/checkpoint_v4/model_epoch_39_loss_4.9348.pt"
     model = load_model(config, src_tokenizer, trg_tokenizer, checkpoint_path)
 
     tests = [
@@ -108,6 +108,8 @@ def main():
         "It is very cold today",
         "I don't understand",
         "Thank you very much",
+        "If i showed you my house, my neighborhood back then, would you understand where I am from?",
+        "In business today, too many executives spend money they haven't earned, to buy things they don't need, to impress people they don't even like."
     ]
 
     for text in tests:

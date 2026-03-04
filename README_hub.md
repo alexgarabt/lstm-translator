@@ -15,24 +15,20 @@ pipeline_tag: translation
 
 # LSTM English-to-Spanish Translator
 
-A sequence-to-sequence neural machine translation model built **entirely from scratch** — including the LSTM cells, encoder, decoder, and attention mechanism — as a deep learning educational project.
+A sequence-to-sequence neural machine translation model built **entirely from scratch** — custom LSTM cells, encoder, decoder, attention mechanism, and beam search — as a deep learning educational project.
 
-## Model Description
+**Code**: [github.com/alexgarabt/lstm-translator](https://github.com/alexgarabt/lstm-translator)
 
-This is a BiLSTM encoder-decoder with Luong (dot-product) attention, trained on ~620K parallel sentence pairs from Tatoeba and Europarl. Every component is implemented from first principles in PyTorch, with no use of `torch.nn.LSTM` or pre-built seq2seq modules.
+## Architecture
 
 | Component | Details |
 |---|---|
 | **Architecture** | BiLSTM Encoder → Dot-Product Attention → LSTM Decoder |
 | **Parameters** | ~31.9M |
 | **Encoder** | 2-layer Bidirectional LSTM (custom), 512 hidden units per direction |
-| **Decoder** | 2-layer LSTM (custom) with attention and teacher forcing |
-| **Attention** | Luong dot-product with learned projection |
+| **Decoder** | 2-layer LSTM (custom) with Luong dot-product attention |
 | **Tokenizer** | SentencePiece BPE, 16K vocab per language |
-| **Training data** | Tatoeba (~222K pairs) + Europarl filtered (~400K pairs) |
-| **Framework** | PyTorch |
-
-## Architecture
+| **Training data** | Tatoeba (~222K pairs) + Europarl filtered (~400K pairs) = ~622K pairs |
 
 ```
 Source (EN) → [Embedding] → [BiLSTM Encoder] → encoder_outputs
@@ -42,88 +38,35 @@ Source (EN) → [Embedding] → [BiLSTM Encoder] → encoder_outputs
 Target (ES) → [Embedding] → [LSTM Decoder] → [Output Projection] → predicted tokens
 ```
 
-**Key implementation details:**
-- Custom `LSTMCell` with fused weight matrices for efficient GPU computation
-- Forget gate bias initialized to 1.0 for stable gradient flow
-- Bidirectional encoder with learned projection for decoder initialization
-- Attention masking for proper handling of padded sequences
-- Beam search decoding for higher quality translations
-
-## Usage
-
-### Installation
+## Quick Start
 
 ```bash
-git clone https://github.com/alexgarabt/lstm-translator.git
-cd lstm-translator
-uv sync
+pip install torch sentencepiece huggingface_hub
 ```
-
-### Quick Translation
 
 ```python
 import torch
 from huggingface_hub import hf_hub_download
-from translator.data.tokenizer import Tokenizer
-from translator.models.encoder import Encoder
-from translator.models.decoder import Decoder
-from translator.models.seq2seq import Seq2Seq
 
 REPO_ID = "alexgara/lstm-en-es-translator"
 
-# Download model and tokenizers
+# Download
 checkpoint_path = hf_hub_download(REPO_ID, "model.pt")
 en_tok_path = hf_hub_download(REPO_ID, "spm_en.model")
 es_tok_path = hf_hub_download(REPO_ID, "spm_es.model")
 
-# Load tokenizers
-src_tok = Tokenizer(en_tok_path)
-trg_tok = Tokenizer(es_tok_path)
+# For full usage with the translator package, see the GitHub repo
+```
 
-# Build and load model
-encoder = Encoder(src_tok.vocab_size, 256, 512, 2, dropout=0.0)
-decoder = Decoder(trg_tok.vocab_size, 256, 512, 1024, 2, dropout=0.0)
-model = Seq2Seq(encoder, decoder,
-                pad_token_id=src_tok.pad_id,
-                bos_token_id=src_tok.bos_id,
-                eos_token_id=src_tok.eos_id)
+For full inference with greedy/beam decoding, clone the [GitHub repo](https://github.com/alexgarabt/lstm-translator) and run:
 
-checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-model.load_state_dict(checkpoint["model_state_dict"])
-model.eval()
-
-# Translate
-def translate(text, max_len=50):
-    src_ids = src_tok.encode(text)
-    src = torch.tensor([src_ids])
-    mask = src != src_tok.pad_id
-
-    with torch.no_grad():
-        enc_out, (h, c) = model.encoder(src, torch.tensor([len(src_ids)]))
-        h = [h[l] for l in range(2)]
-        c = [c[l] for l in range(2)]
-        context = torch.zeros(1, enc_out.shape[2])
-        token = torch.tensor([trg_tok.bos_id])
-        result = []
-
-        for _ in range(max_len):
-            logits, h, c, context, _ = model.decoder.forward_step(
-                token, h, c, enc_out, context, mask
-            )
-            token = logits.argmax(dim=1)
-            if token.item() == trg_tok.eos_id:
-                break
-            result.append(token.item())
-
-    return trg_tok.decode(result)
-
-print(translate("How are you?"))
-# Output: ¿cómo estás?
+```bash
+uv run python scripts/inference.py --interactive
 ```
 
 ## Example Translations
 
-| English | Spanish (Greedy) | Spanish (Beam) |
+| English | Greedy | Beam (k=5) |
 |---|---|---|
 | Hello | hola. | hola. |
 | How are you? | ¿cómo estás? | ¿cómo estás? |
@@ -131,10 +74,9 @@ print(translate("How are you?"))
 | The cat is black | el gato es negro. | el gato es negro. |
 | Where is the hospital? | ¿dónde está el hospital? | ¿dónde está el hospital? |
 | I want to eat | quiero quiero. | quiero comer. |
-| She is my sister | ella es mi hermana. | ella es mi hermana. |
 | I don't understand | no no lo entiendo. | no entiendo. |
 
-Beam search eliminates the repetition artifacts present in greedy decoding.
+Beam search eliminates the repetition artifacts visible in greedy decoding.
 
 ## Training
 
@@ -144,81 +86,94 @@ Beam search eliminates the repetition artifacts present in greedy decoding.
 |---|---|
 | Embedding dimension | 256 |
 | Hidden dimension | 512 |
-| Encoder dimension | 1024 (2 × 512) |
+| Encoder dimension | 1024 (bidirectional) |
 | Layers | 2 |
 | Dropout | 0.35 |
 | Batch size | 128 |
-| Learning rate | 3e-4 |
-| Optimizer | Adam |
-| Gradient clipping | 1.0 (max norm) |
+| Learning rate | 3e-4 (AdamW) |
+| Gradient clipping | 1.0 |
 | Label smoothing | 0.1 |
 | Teacher forcing | Linear decay 1.0 → 0.3 |
 | Max sequence length | 35 tokens |
-| BPE vocabulary | 16,000 per language |
+| Epochs | 40 |
+
+### Training Curves
+
+<table>
+<tr>
+<td><img src="img/epoch_train_loss.svg" width="400" alt="Train Loss"/></td>
+<td><img src="img/epoch_val_loss.svg" width="400" alt="Val Loss"/></td>
+</tr>
+<tr>
+<td align="center">Train Loss (epoch)</td>
+<td align="center">Validation Loss (epoch)</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td><img src="img/train_loss.svg" width="270" alt="Train Loss (step)"/></td>
+<td><img src="img/train_grad_norm.svg" width="270" alt="Gradient Norm"/></td>
+<td><img src="img/train_attention_entropy.svg" width="270" alt="Attention Entropy"/></td>
+</tr>
+<tr>
+<td align="center">Train Loss (step)</td>
+<td align="center">Gradient Norm</td>
+<td align="center">Attention Entropy</td>
+</tr>
+</table>
+
+The apparent uptick in train loss after epoch ~16 is caused by teacher forcing decay (the training task gets harder as the model relies more on its own predictions). The validation loss — always evaluated fully autoregressively — decreases monotonically.
+
+### Attention Visualization
+
+The model learns interpretable word alignments:
+
+<table>
+<tr>
+<td><img src="img/context1.png" width="270"/></td>
+<td><img src="img/context2.png" width="270"/></td>
+<td><img src="img/context3.png" width="270"/></td>
+</tr>
+</table>
 
 ### Dataset
 
 | Source | Pairs | Description |
 |---|---|---|
-| [Tatoeba](https://opus.nlpl.eu/Tatoeba.php) | ~222K | Short conversational sentences (median 6 words) |
-| [Europarl](https://opus.nlpl.eu/Europarl.php) | ~400K (filtered) | European Parliament proceedings, filtered to ≤30 words |
-| **Total** | **~622K** | Mixed conversational + formal register |
+| [Tatoeba](https://opus.nlpl.eu/Tatoeba.php) | ~222K | Short conversational sentences |
+| [Europarl](https://opus.nlpl.eu/Europarl.php) | ~400K | Parliamentary proceedings (filtered ≤30 words) |
+| **Total** | **~622K** | Mixed register |
 
-### Training from scratch
+## What's Built From Scratch
 
-```bash
-git clone https://github.com/alexgarabt/lstm-translator.git
-cd lstm-translator
-uv sync
+Every neural network component is implemented from first principles — no `torch.nn.LSTM` or pre-built seq2seq modules:
 
-# Train (downloads data, trains tokenizers, trains model)
-uv run python scripts/train_v2.py
+- **LSTMCell** — fused gates, Xavier init, forget bias = 1.0
+- **BiLSTM Encoder** — forward + backward with learned projection
+- **Dot-Product Attention** — score, mask, softmax, context
+- **LSTM Decoder** — step-by-step with attention and teacher forcing
+- **Beam Search** — k-best decoding with length normalization
 
-# Monitor with TensorBoard
-uv run tensorboard --logdir training/runs_v2/
-```
+## Files in This Repo
 
-### Parameter Breakdown
-
-| Component | Parameters | % of Total |
-|---|---|---|
-| Encoder embedding | 4.1M | 12.8% |
-| Encoder BiLSTM (2 layers × 2 directions) | 7.3M | 23.0% |
-| Encoder projections | 1.0M | 3.3% |
-| Decoder embedding | 4.1M | 12.8% |
-| Decoder LSTM (2 layers) | 5.8M | 18.1% |
-| Attention + combination | 1.3M | 4.1% |
-| Output projection | 8.2M | 25.8% |
-| **Total** | **~31.9M** | **100%** |
-
-## What Was Built From Scratch
-
-This project implements every neural network component from the ground up:
-
-- **LSTMCell**: Four gates (input, forget, candidate, output) with fused weight matrices, Xavier initialization, and forget gate bias = 1.0
-- **LSTM**: Multi-layer wrapper that iterates the cell over timesteps
-- **BiLSTM Encoder**: Forward + backward LSTMs with state concatenation and learned projection
-- **Dot-Product Attention**: Score computation, padding mask with -∞, softmax normalization, weighted context
-- **LSTM Decoder**: Token embedding + context concatenation, step-by-step generation with attention
-- **Seq2Seq**: Orchestration with configurable teacher forcing schedule
-- **Beam Search**: K-best sequence decoding with length normalization
-- **SentencePiece BPE Tokenizer**: Wrapper with special token handling
-- **Training Loop**: Gradient clipping, label smoothing, TensorBoard logging, checkpoint management
-
-## Attention Visualization
-
-The model learns interpretable word alignments. Below are attention heatmaps from validation examples showing the model correctly attending to source words when generating each target token:
-
-- "He lives in a huge house" → "él vive en una casa enorme" (clean diagonal alignment)
-- "Someone opened the door" → "alguien abrió la puerta" (correct cross-lingual mapping)
-- "I have nothing particular to say" → "no tengo nada particular que decir" (learned Spanish double negation)
+| File | Description |
+|---|---|
+| `model.pt` | Model checkpoint (weights + optimizer state) |
+| `hparams.json` | Training hyperparameters |
+| `spm_en.model` | English SentencePiece tokenizer |
+| `spm_es.model` | Spanish SentencePiece tokenizer |
+| `data/combined.en` | English training sentences |
+| `data/combined.es` | Spanish training sentences |
+| `config.py` | Model configuration dataclass |
+| `train.py` | Training script |
 
 ## Limitations
 
-- Best suited for short-to-medium sentences (under 30 words)
-- Trained primarily on conversational and parliamentary text — may struggle with specialized domains
-- LSTM architecture is inherently sequential, making inference slower than Transformer-based models
-- Single direction only (English → Spanish)
+- Best for short-to-medium sentences (under 30 words)
+- English → Spanish only
+- LSTM architecture is inherently sequential (slower inference than Transformers)
+- Trained on conversational + parliamentary text — may struggle with specialized domains
 
 ## License
 
@@ -234,9 +189,3 @@ MIT
   url = {https://github.com/alexgarabt/lstm-translator}
 }
 ```
-
-## Acknowledgments
-
-- Training data from [OPUS](https://opus.nlpl.eu/) (Tatoeba and Europarl corpora)
-- Tokenization with [SentencePiece](https://github.com/google/sentencepiece)
-- Attention mechanism based on [Luong et al. (2015)](https://arxiv.org/abs/1508.04025)
