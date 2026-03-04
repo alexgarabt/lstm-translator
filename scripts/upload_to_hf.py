@@ -71,6 +71,12 @@ def main():
             path_in_repo=f"img/{png.name}",
             repo_id=REPO_ID,
         )
+    
+    api.upload_file(
+        path_or_fileobj="img/lstm.mp4",
+        path_in_repo="img/lstm.mp4",
+        repo_id=REPO_ID,
+    )
 
     # README 
     api.upload_file(
