@@ -48,10 +48,15 @@ def main():
         repo_id=REPO_ID,
     )
 
-    # Upload scripts
     api.upload_file(
         path_or_fileobj="scripts/train.py",
         path_in_repo="train.py",
+        repo_id=REPO_ID,
+    )
+
+    api.upload_file(
+        path_or_fileobj="README_hub.md",
+        path_in_repo="README.md",
         repo_id=REPO_ID,
     )
 

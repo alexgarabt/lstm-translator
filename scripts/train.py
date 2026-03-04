@@ -20,7 +20,7 @@ def main():
         hidden_dim=512,
         num_layers=2,
         dropout=0.35,
-        batch_size=96,
+        batch_size=128,
         learning_rate=3e-4,
         max_epochs=20,
         gradient_clip=1.0,
