@@ -4,6 +4,8 @@ A sequence-to-sequence neural machine translation system built **entirely from s
 
 **Pre-trained model**: [huggingface.co/alexgara/lstm-en-es-translator](https://huggingface.co/alexgara/lstm-en-es-translator)
 
+https://github.com/user-attachments/assets/76ef98ac-d618-4cf3-a45f-22ad45886e11
+
 ## Quick Start
 
 ```bash

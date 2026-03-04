@@ -19,6 +19,8 @@ A sequence-to-sequence neural machine translation model built **entirely from sc
 
 **Code**: [github.com/alexgarabt/lstm-translator](https://github.com/alexgarabt/lstm-translator)
 
+<video src="https://github.com/user-attachments/assets/76ef98ac-d618-4cf3-a45f-22ad45886e11" controls width="600"></video>
+
 ## Architecture
 
 | Component | Details |
